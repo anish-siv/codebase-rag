@@ -356,8 +356,13 @@
   <!-- Admin Key (only needed if this deployment requires one to ingest/clear) -->
   <div class="sidebar-section">
     <div class="section-label">Admin Key</div>
-    <label for="admin-key-input">Required for ingest/clear on this deployment</label>
+    <label for="admin-key-input">Owner-only — not required to ask questions</label>
     <input type="password" id="admin-key-input" placeholder="leave blank if not required" oninput="saveAdminKey(this.value)" />
+    <p style="font-size:11px;color:var(--text-muted);margin-top:6px">
+      Just visiting? Leave this blank — you can ask questions freely.
+      This is only for the project owner to ingest new repos or clear
+      the index.
+    </p>
   </div>
 
   <!-- Local Path Ingestion -->
