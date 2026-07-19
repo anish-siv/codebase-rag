@@ -1,5 +1,5 @@
 server:
-  port: 8082
+  port: ${PORT:8082}
 
 spring:
   autoconfigure:
@@ -9,9 +9,9 @@ spring:
   application:
     name: codebase-rag
   datasource:
-    url: jdbc:postgresql://localhost:5432/ragdb
-    username: postgres
-    password: postgres
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/ragdb}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
@@ -33,3 +33,10 @@ spring:
         initialize-schema: true
         dimensions: 1536
         distance-type: COSINE_DISTANCE
+
+# Shared secret required (as an "X-Admin-Key" header) to call the mutating
+# endpoints (/api/ingest, /api/ingest/github, /api/clear). Blank/unset means
+# no auth is enforced -- fine for local dev, never leave unset on a public
+# deployment. See AdminAuthInterceptor.
+app:
+  admin-key: ${ADMIN_KEY:}

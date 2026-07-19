@@ -1,0 +1,7 @@
+target/
+.git/
+.idea/
+*.iml
+benchmark/results/
+GUIDE.md
+.env
