@@ -35,3 +35,6 @@ build/
 ### Env ###
 .env
 benchmark/results/
+
+### Personal notes (not for the public repo) ###
+GUIDE.md
