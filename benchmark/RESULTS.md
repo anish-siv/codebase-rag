@@ -23,11 +23,15 @@ Run on Jul 18, 2026. App: Java 21 / Spring Boot 4.1 / Spring AI 2.0, local pgvec
 | Metric | Value |
 |---|---|
 | n | 15 |
-| min | 5.94s |
-| p50 | 7.60s |
-| p95 | 8.73s |
+| min | 4.71s |
+| p50 | 7.32s |
+| p95 | 8.98s |
 | max | 10.36s |
-| mean | 7.50s |
+| mean | 7.31s |
+
+(Re-measured alongside §5 below when re-verifying the repo-scoping fix
+didn't change unscoped behavior; original run was 5.94/7.60/8.73/10.36/7.50s
+— within normal run-to-run LLM latency variance.)
 
 End-to-end includes: question embedding call → pgvector cosine top-5 search → Claude
 `claude-sonnet-4-6` generation (non-streaming). Claude generation is the dominant cost.
@@ -71,6 +75,34 @@ bug scenario and confirming the fix:
    their `repo` tag untouched — confirmed via `/api/status` immediately
    after.
 
+## 5. Repo-scoped filtering: latency overhead
+
+The isolation test above proves *correctness*. This measures *cost*: does
+adding a `Filter.Expression` (`metadata->>'repo' = ?`) to the pgvector
+query change latency? Re-ran the same 15-question benchmark from §2 twice
+against the same single-repo corpus (`spring-petclinic`, 123 chunks) —
+once unscoped, once with `repo=spring-projects/spring-petclinic` — so any
+difference is attributable to the filter itself, not a different corpus.
+
+| Mode | p50 | p95 | mean | max | Hit-rate |
+|---|---|---|---|---|---|
+| Unscoped (original code path) | 7.32s | 8.98s | 7.31s | 10.36s | 14/15 (93%) |
+| Scoped (`repo=` filter applied) | 7.27s | 8.48s | 7.39s | 10.78s | 14/15 (93%) |
+
+No measurable difference — the ~50-200ms deltas are noise from Claude's
+generation call (which dominates at ~7s), not signal from the filter.
+Makes sense: there's no index on `metadata->>'repo'` (or on `embedding` —
+see `GUIDE.md` §10), so both modes already do a full sequential scan of
+`vector_store`; adding one more predicate evaluated per row during that
+same scan is negligible next to a multi-second LLM call. The exact same
+single question missed retrieval in both runs (`Person.java`, same as
+§3), confirming the filter didn't change which chunks get retrieved when
+only one repo is ingested — expected, since scoping to the only ingested
+repo can't exclude anything.
+
+Full per-question detail: `benchmark/results/query_bench.json` (unscoped),
+`benchmark/results/query_bench_scoped.json` (scoped).
+
 ## Repro
 
 ```bash
@@ -95,4 +127,10 @@ curl -s "http://localhost:8082/api/status" | python3 -c "import json,sys; print(
 curl -s -G "http://localhost:8082/api/query" --data-urlencode "question=What fields does the Owner class have?" --data-urlencode "repo=$(pwd)"
 curl -s -G "http://localhost:8082/api/query" --data-urlencode "question=What fields does the Owner class have?" --data-urlencode "repo=spring-projects/spring-petclinic"
 curl -s -X DELETE "http://localhost:8082/api/clear?repo=$(pwd)"
+
+# 5. scoped vs. unscoped latency (single-repo corpus, so it's an apples-to-apples comparison)
+curl -s -X DELETE http://localhost:8082/api/clear
+curl -s -X POST "http://localhost:8082/api/ingest/github?url=https://github.com/spring-projects/spring-petclinic"
+python3 benchmark/query_bench.py
+python3 benchmark/query_bench.py --repo spring-projects/spring-petclinic
 ```

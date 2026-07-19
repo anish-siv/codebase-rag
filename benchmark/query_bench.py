@@ -1,12 +1,24 @@
 #!/usr/bin/env python3
 """Benchmark /api/query latency and top-5 retrieval hit-rate against the
-ingested spring-projects/spring-petclinic repo."""
+ingested spring-projects/spring-petclinic repo.
+
+Usage:
+    python3 benchmark/query_bench.py                 # unscoped (searches all ingested repos)
+    python3 benchmark/query_bench.py --repo owner/repo  # scoped to one repo
+"""
+import argparse
 import json
 import time
 import urllib.parse
 import urllib.request
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--repo", default=None, help="optional repo filter, e.g. spring-projects/spring-petclinic")
+parser.add_argument("--out", default=None, help="output json path (defaults based on --repo)")
+args = parser.parse_args()
+
 BASE = "http://localhost:8082/api/query"
+OUT_PATH = args.out or ("benchmark/results/query_bench_scoped.json" if args.repo else "benchmark/results/query_bench.json")
 
 # (question, expected substring(s) that should appear in at least one returned source)
 CASES = [
@@ -27,9 +39,13 @@ CASES = [
     ("According to the README, how do you run this application locally?", ["README.md"]),
 ]
 
+print(f"mode: {'scoped to repo=' + args.repo if args.repo else 'unscoped'}  ->  {OUT_PATH}")
 results = []
 for i, (question, expected) in enumerate(CASES, 1):
-    q = urllib.parse.urlencode({"question": question})
+    params = {"question": question}
+    if args.repo:
+        params["repo"] = args.repo
+    q = urllib.parse.urlencode(params)
     url = f"{BASE}?{q}"
     t0 = time.perf_counter()
     try:
@@ -52,7 +68,7 @@ for i, (question, expected) in enumerate(CASES, 1):
     })
     print(f"[{i:2}/{len(CASES)}] {elapsed:6.2f}s  hit={hit!s:5}  {question[:60]}")
 
-with open("benchmark/results/query_bench.json", "w") as f:
+with open(OUT_PATH, "w") as f:
     json.dump(results, f, indent=2)
 
 times = sorted(r["elapsed_s"] for r in results)

@@ -53,8 +53,9 @@ for methodology and full results.
 | Metric | Result |
 |---|---|
 | GitHub ingestion throughput | 50 files / 123 chunks in 12.1s (~4.1 files/sec) |
-| Query latency (end-to-end) | p50 7.6s, p95 8.7s |
+| Query latency (end-to-end) | p50 7.3s, p95 9.0s |
 | Top-5 retrieval hit-rate | 14/15 (93%) |
+| Repo-scoped filter overhead | None measurable (p50 7.3s unscoped vs. 7.3s scoped) |
 
 ## Limitations
 
