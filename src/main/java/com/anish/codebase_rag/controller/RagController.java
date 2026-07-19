@@ -47,8 +47,9 @@ public class RagController {
     }
 
     @GetMapping("/query")
-    public QueryResponse query(@RequestParam String question) {
-        return ragService.query(question);
+    public QueryResponse query(@RequestParam String question,
+                                @RequestParam(required = false) String repo) {
+        return ragService.query(question, repo);
     }
 
     @GetMapping("/status")
@@ -60,16 +61,27 @@ public class RagController {
             "SELECT DISTINCT metadata->>'source' FROM vector_store WHERE metadata->>'source' IS NOT NULL",
             String.class);
 
+        List<String> repos = jdbcTemplate.queryForList(
+            "SELECT DISTINCT metadata->>'repo' FROM vector_store WHERE metadata->>'repo' IS NOT NULL ORDER BY 1",
+            String.class);
+
         return Map.of(
             "totalChunks", chunkCount != null ? chunkCount : 0,
             "totalFiles", sources.size(),
-            "sources", sources
+            "sources", sources,
+            "repos", repos
         );
     }
 
     @DeleteMapping("/clear")
-    public Map<String, Object> clear() {
-        int deleted = jdbcTemplate.update("DELETE FROM vector_store");
+    public Map<String, Object> clear(@RequestParam(required = false) String repo) {
+        int deleted;
+        if (repo != null && !repo.isBlank()) {
+            deleted = jdbcTemplate.update(
+                "DELETE FROM vector_store WHERE metadata->>'repo' = ?", repo);
+            return Map.of("message", "Cleared repo: " + repo, "chunksDeleted", deleted);
+        }
+        deleted = jdbcTemplate.update("DELETE FROM vector_store");
         return Map.of("message", "Cleared vector store", "chunksDeleted", deleted);
     }
 }

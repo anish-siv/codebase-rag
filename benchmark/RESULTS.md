@@ -44,6 +44,33 @@ chunks contain the line `extends Person`. Answer was grounded-adjacent, not a pu
 
 Full per-question detail: `benchmark/results/query_bench.json`.
 
+## 4. Repo-scoped isolation (verification test)
+
+Originally, `vector_store` had no repo identifier and every query
+searched across every ingested repo with no isolation — a real
+cross-contamination bug, not just a theoretical one (see `GUIDE.md` §12
+point 1 for the full story). Fixed by tagging each chunk's metadata with
+a `repo` field at ingestion and adding an optional `Filter.Expression`
+filter at query time. Verified by deliberately reproducing the original
+bug scenario and confirming the fix:
+
+1. Ingested this repo locally (37 chunks) and `spring-projects/spring-petclinic`
+   from GitHub (123 chunks) into the same table, **without clearing in
+   between** — the exact scenario that used to cause contamination.
+2. Asked the identical question ("What fields does the `Owner` class
+   have?" — a question entirely about petclinic's domain) three ways:
+
+| Scope | Sources returned |
+|---|---|
+| `repo=<local path>` | Only local-repo files (`GUIDE.md`, `benchmark/RESULTS.md`, `HELP.md`, `QueryResponse.java`) — zero petclinic leakage |
+| `repo=spring-projects/spring-petclinic` | Only `Owner.java`/`OwnerController.java` — zero local-repo leakage |
+| *(no `repo` param)* | Petclinic sources — old unscoped behavior preserved exactly, confirming backward compatibility |
+
+3. `DELETE /api/clear?repo=<local path>` removed exactly the 37 local
+   chunks (`chunksDeleted: 37`) and left all 123 petclinic chunks and
+   their `repo` tag untouched — confirmed via `/api/status` immediately
+   after.
+
 ## Repro
 
 ```bash
@@ -59,4 +86,13 @@ curl -s -X POST "http://localhost:8082/api/ingest?path=$(pwd)"
 curl -s -X DELETE http://localhost:8082/api/clear
 curl -s -X POST "http://localhost:8082/api/ingest/github?url=https://github.com/spring-projects/spring-petclinic"
 python3 benchmark/query_bench.py
+
+# 4. repo-scoped isolation (no clear between the two ingests, on purpose)
+curl -s -X DELETE http://localhost:8082/api/clear
+curl -s -X POST "http://localhost:8082/api/ingest?path=$(pwd)"
+curl -s -X POST "http://localhost:8082/api/ingest/github?url=https://github.com/spring-projects/spring-petclinic"
+curl -s "http://localhost:8082/api/status" | python3 -c "import json,sys; print(json.load(sys.stdin)['repos'])"
+curl -s -G "http://localhost:8082/api/query" --data-urlencode "question=What fields does the Owner class have?" --data-urlencode "repo=$(pwd)"
+curl -s -G "http://localhost:8082/api/query" --data-urlencode "question=What fields does the Owner class have?" --data-urlencode "repo=spring-projects/spring-petclinic"
+curl -s -X DELETE "http://localhost:8082/api/clear?repo=$(pwd)"
 ```

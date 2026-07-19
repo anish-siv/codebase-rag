@@ -12,6 +12,9 @@ any codebase, grounded in the actual source code with file-level citations.
 - **Web UI** — chat interface with dark theme, no external dependencies
 - **Chunk overlap** — 10-line overlap between chunks prevents context loss 
   at boundaries
+- **Repo-scoped querying** — ingest multiple repos without clearing 
+  between them, then scope a question (or a clear) to just one via the 
+  Query Scope selector, so answers don't mix sources across repos
 
 ## How it works
 
@@ -30,12 +33,16 @@ any codebase, grounded in the actual source code with file-level citations.
 |---|---|---|
 | `POST` | `/api/ingest?path=` | Ingest a local directory |
 | `POST` | `/api/ingest/github?url=` | Ingest a public GitHub repo (no cloning) |
-| `GET` | `/api/query?question=` | Ask a question, get an answer + source files |
-| `GET` | `/api/status` | View indexed file/chunk counts |
-| `DELETE` | `/api/clear` | Clear the vector store |
+| `GET` | `/api/query?question=&repo=` | Ask a question; optional `repo` scopes retrieval to one ingested repo |
+| `GET` | `/api/status` | View indexed file/chunk counts and the list of distinct ingested repos |
+| `DELETE` | `/api/clear?repo=` | Clear the vector store; optional `repo` clears just that repo |
 
 Ingestion is filtered to 5 extensions (`.java .js .ts .py .md`); GitHub 
-ingestion additionally caps individual files at 50KB.
+ingestion additionally caps individual files at 50KB. Each chunk is tagged 
+with a `repo` identifier (the local directory path, or `owner/repo` for 
+GitHub) — omit `repo` on `/api/query` to search across all ingested repos 
+at once (useful for a single-repo workflow; scope explicitly once you've 
+ingested more than one).
 
 ## Benchmarks
 

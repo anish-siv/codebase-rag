@@ -59,6 +59,7 @@ public class GitHubIngestionService {
 
         List<Document> allDocs = new ArrayList<>();
         int filesIngested = 0;
+        String repoId = owner + "/" + repo;
 
         for (JsonNode node : tree) {
             if (!"blob".equals(node.path("type").asText())) continue;
@@ -87,7 +88,7 @@ public class GitHubIngestionService {
                 }
 
                 String sourcePath = "github:" + owner + "/" + repo + "/" + path;
-                List<Document> chunks = ingestionService.chunkContent(sourcePath, fileResponse.body());
+                List<Document> chunks = ingestionService.chunkContent(sourcePath, fileResponse.body(), repoId);
                 allDocs.addAll(chunks);
                 filesIngested++;
             } catch (Exception e) {

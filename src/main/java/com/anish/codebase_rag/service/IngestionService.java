@@ -25,6 +25,7 @@ public class IngestionService {
     public int ingestDirectory(String directoryPath) throws IOException {
         List<Document> documents = new ArrayList<>();
         Path rootPath = Paths.get(directoryPath);
+        String repo = rootPath.toAbsolutePath().normalize().toString();
 
         try (Stream<Path> paths = Files.walk(rootPath)) {
             paths.filter(Files::isRegularFile)
@@ -32,7 +33,7 @@ public class IngestionService {
                  .forEach(filePath -> {
                      try {
                          String content = Files.readString(filePath);
-                         List<Document> chunks = chunkContent(filePath.toString(), content);
+                         List<Document> chunks = chunkContent(filePath.toString(), content, repo);
                          documents.addAll(chunks);
                      } catch (IOException e) {
                          System.err.println("Failed to read: " + filePath);
@@ -45,7 +46,17 @@ public class IngestionService {
         return documents.size();
     }
 
+    /**
+     * @deprecated kept for callers that don't have a repo identifier; prefer
+     * {@link #chunkContent(String, String, String)}. Tags chunks with a null repo,
+     * meaning they'll only surface in unscoped (repo=null) queries.
+     */
+    @Deprecated
     public List<Document> chunkContent(String sourcePath, String content) {
+        return chunkContent(sourcePath, content, null);
+    }
+
+    public List<Document> chunkContent(String sourcePath, String content, String repo) {
         List<Document> chunks = new ArrayList<>();
         String[] lines = content.split("\n");
         int chunkSize = 50;
@@ -61,10 +72,13 @@ public class IngestionService {
             }
             String chunkText = sb.toString().trim();
             if (!chunkText.isEmpty()) {
-                Document doc = new Document(
-                    chunkText,
-                    Map.of("source", sourcePath, "chunk", chunkIndex)
-                );
+                Map<String, Object> metadata = new java.util.HashMap<>();
+                metadata.put("source", sourcePath);
+                metadata.put("chunk", chunkIndex);
+                if (repo != null) {
+                    metadata.put("repo", repo);
+                }
+                Document doc = new Document(chunkText, metadata);
                 chunks.add(doc);
                 chunkIndex++;
             }

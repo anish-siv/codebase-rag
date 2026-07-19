@@ -5,6 +5,8 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -23,9 +25,21 @@ public class RagService {
     }
 
     public QueryResponse query(String question) {
-        List<Document> docs = vectorStore.similaritySearch(
-            SearchRequest.builder().query(question).topK(5).build()
-        );
+        return query(question, null);
+    }
+
+    /**
+     * @param repo when non-blank, scopes retrieval to chunks tagged with this repo
+     *             identifier (see IngestionService); when null/blank, searches
+     *             across every ingested repo (pre-existing, unscoped behavior).
+     */
+    public QueryResponse query(String question, String repo) {
+        SearchRequest.Builder requestBuilder = SearchRequest.builder().query(question).topK(5);
+        if (repo != null && !repo.isBlank()) {
+            Filter.Expression filter = new FilterExpressionBuilder().eq("repo", repo).build();
+            requestBuilder.filterExpression(filter);
+        }
+        List<Document> docs = vectorStore.similaritySearch(requestBuilder.build());
 
         StringBuilder context = new StringBuilder();
         LinkedHashSet<String> seenSources = new LinkedHashSet<>();

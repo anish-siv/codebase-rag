@@ -86,7 +86,7 @@
 
     label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
 
-    input[type="text"], input[type="url"] {
+    input[type="text"], input[type="url"], select {
       width: 100%;
       background: var(--bg);
       border: 1px solid var(--border);
@@ -99,7 +99,7 @@
       transition: border-color 0.15s;
     }
 
-    input[type="text"]:focus, input[type="url"]:focus {
+    input[type="text"]:focus, input[type="url"]:focus, select:focus {
       border-color: var(--accent);
     }
 
@@ -388,6 +388,19 @@
     </button>
     <div id="clear-toast"></div>
   </div>
+
+  <!-- Query Scope -->
+  <div class="sidebar-section">
+    <div class="section-label">Query Scope</div>
+    <label for="repo-scope-select">Answer using</label>
+    <select id="repo-scope-select">
+      <option value="">All ingested repos</option>
+    </select>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:6px">
+      Scoping to one repo prevents answers from mixing sources across
+      multiple ingested repos/directories.
+    </p>
+  </div>
 </aside>
 
 <!-- Chat -->
@@ -452,6 +465,16 @@
       } else {
         filesEl.innerHTML = '<div style="color:var(--text-muted);font-size:11px;margin-top:6px">No files ingested yet</div>';
       }
+
+      const select = document.getElementById('repo-scope-select');
+      const previousValue = select.value;
+      const repos = data.repos || [];
+      select.innerHTML = '<option value="">All ingested repos</option>' +
+        repos.map(r => {
+          const shortLabel = r.includes('/') && !r.startsWith('/') ? r : r.split('/').pop();
+          return `<option value="${r}" title="${r}">${shortLabel}</option>`;
+        }).join('');
+      if (repos.includes(previousValue)) select.value = previousValue;
     } catch (e) {
       console.error('Status fetch failed:', e);
     }
@@ -495,10 +518,15 @@
   }
 
   async function clearIndex() {
-    if (!confirm('Delete all ingested data from the vector store?')) return;
+    const scopeSelect = document.getElementById('repo-scope-select');
+    const repo = scopeSelect.value;
+    const scopeLabel = repo ? scopeSelect.options[scopeSelect.selectedIndex].textContent : 'the entire';
+    if (!confirm(`Delete all ingested data from ${repo ? `"${scopeLabel}"` : 'the entire vector store'}?`)) return;
     setLoading('clear-btn', true, 'Clear Index');
     try {
-      const res = await fetch('/api/clear', { method: 'DELETE' });
+      let url = '/api/clear';
+      if (repo) url += '?repo=' + encodeURIComponent(repo);
+      const res = await fetch(url, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || res.statusText);
       showToast('clear-toast', `✓ Cleared ${data.chunksDeleted} chunks`, 'success');
@@ -606,7 +634,10 @@
     const thinkingEl = appendThinking();
 
     try {
-      const res = await fetch('/api/query?question=' + encodeURIComponent(question));
+      const repo = document.getElementById('repo-scope-select').value;
+      let url = '/api/query?question=' + encodeURIComponent(question);
+      if (repo) url += '&repo=' + encodeURIComponent(repo);
+      const res = await fetch(url);
       const data = await res.json();
       thinkingEl.remove();
       if (!res.ok) throw new Error(data.answer || res.statusText);
