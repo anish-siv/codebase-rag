@@ -17,12 +17,57 @@ any codebase, grounded in the actual source code with file-level citations.
 
 1. Source files are chunked (50 lines, 10-line overlap) and embedded via 
    OpenAI text-embedding-3-small, stored in pgvector
-2. At query time, the question is embedded and pgvector finds the 
-   semantically closest chunks via cosine similarity
-3. Retrieved chunks are injected into a Claude prompt via Spring AI's 
-   RetrievalAugmentationAdvisor
+2. At query time, the question is embedded and pgvector's `VectorStore` 
+   finds the top-5 semantically closest chunks via cosine similarity
+3. Retrieved chunks are concatenated into context and passed to Claude 
+   via Spring AI's `ChatClient`
 4. Claude generates a grounded answer — citations show exactly which 
    files were used
+
+## Endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/ingest?path=` | Ingest a local directory |
+| `POST` | `/api/ingest/github?url=` | Ingest a public GitHub repo (no cloning) |
+| `GET` | `/api/query?question=` | Ask a question, get an answer + source files |
+| `GET` | `/api/status` | View indexed file/chunk counts |
+| `DELETE` | `/api/clear` | Clear the vector store |
+
+Ingestion is filtered to 5 extensions (`.java .js .ts .py .md`); GitHub 
+ingestion additionally caps individual files at 50KB.
+
+## Benchmarks
+
+Measured against a real 50-file public repo (`spring-projects/spring-petclinic`) 
+and 15 real questions — see [`benchmark/RESULTS.md`](benchmark/RESULTS.md) 
+for methodology and full results.
+
+| Metric | Result |
+|---|---|
+| GitHub ingestion throughput | 50 files / 123 chunks in 12.1s (~4.1 files/sec) |
+| Query latency (end-to-end) | p50 7.6s, p95 8.7s |
+| Top-5 retrieval hit-rate | 14/15 (93%) |
+
+## Limitations
+
+- **Query latency** — Claude generation dominates end-to-end latency 
+  (5.3–9.7s per call, measured), vs. under 2.4s for embedding + pgvector 
+  retrieval combined; streaming responses would improve perceived 
+  responsiveness
+- **GitHub ingestion is sequential** — files are fetched one HTTP request 
+  at a time with no concurrency; parallelizing fetches would improve 
+  throughput on large repos (embedding calls themselves are already 
+  batched by Spring AI's default token-count-based batching strategy)
+- **No incremental updates** — re-ingesting a repo after file changes 
+  requires clearing and re-indexing from scratch; there's no dedup or 
+  upsert-by-source logic
+- **GitHub tree truncation** — the GitHub Trees API caps recursive results 
+  at 100,000 entries / 7MB; very large monorepos may return incomplete 
+  file lists (not detected or handled)
+- **Fixed chunk boundaries** — 50-line splits don't respect function or 
+  class boundaries; semantic/AST-aware chunking would improve retrieval 
+  precision
 
 ## Tech Stack
 
@@ -34,8 +79,13 @@ any codebase, grounded in the actual source code with file-level citations.
 
 ## Setup
 
+Requires **JDK 21** (check with `java -version`; if you have an older 
+default JDK on your `PATH`, point `JAVA_HOME` at a JDK 21 install before 
+running).
+
 1. `docker run -d --name pgvector-db -p 5432:5432 -e POSTGRES_USER=postgres 
    -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ragdb pgvector/pgvector:pg16`
-2. Set `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` environment variables
-3. `./mvnw spring-boot:run`
+2. `cp .env.example .env` and fill in your `ANTHROPIC_API_KEY` and 
+   `OPENAI_API_KEY` (never commit this file — it's gitignored)
+3. `./run.sh` (sources `.env` automatically and boots the app)
 4. Open `http://localhost:8082`

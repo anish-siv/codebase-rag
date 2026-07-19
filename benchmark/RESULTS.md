@@ -52,7 +52,7 @@ docker run -d --name pgvector-db -p 5432:5432 -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ragdb pgvector/pgvector:pg16
 
 # 2. app (reads .env for ANTHROPIC_API_KEY / OPENAI_API_KEY)
-./benchmark/run-app.sh
+./run.sh
 
 # 3. benchmarks
 curl -s -X POST "http://localhost:8082/api/ingest?path=$(pwd)"
