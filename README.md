@@ -3,6 +3,12 @@
 A Spring Boot application that answers natural language questions about 
 any codebase, grounded in the actual source code with file-level citations.
 
+🔗 **Live demo:** [codebase-rag-xxsc.onrender.com](https://codebase-rag-xxsc.onrender.com/) 
+— pre-loaded with [`spring-projects/spring-petclinic`](https://github.com/spring-projects/spring-petclinic). 
+Querying is open to anyone; ingest/clear are gated behind an admin key (see 
+[Deployment](#deployment)). First request may take ~30s to respond if the 
+free-tier instance had spun down from inactivity.
+
 ## Features
 
 - **Local ingestion** — point it at any local directory
@@ -97,3 +103,21 @@ running).
    `OPENAI_API_KEY` (never commit this file — it's gitignored)
 3. `./run.sh` (sources `.env` automatically and boots the app)
 4. Open `http://localhost:8082`
+
+## Deployment
+
+The live demo runs on [Render](https://render.com) (Docker web service, 
+free tier) backed by [Neon](https://neon.tech) (serverless Postgres with 
+the pgvector extension). The `Dockerfile` is a multi-stage build (Maven 
+build stage → JRE runtime stage, non-root user), and `render.yaml` is a 
+Render Blueprint that provisions the service and declares the required 
+env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `ADMIN_KEY`, 
+`SPRING_DATASOURCE_*`) as secrets to be filled in on deploy.
+
+Because the app is public, mutating endpoints (`/api/ingest`, 
+`/api/ingest/github`, `/api/clear`) are gated behind a shared-secret 
+`X-Admin-Key` header, enforced by `AdminAuthInterceptor`. If `ADMIN_KEY` 
+is unset (the local-dev default), the gate is a no-op; setting it in the 
+deployment environment turns it on. Read-only querying (`/api/query`, 
+`/api/status`) is never gated — the point of the demo is for anyone to 
+ask it questions.
